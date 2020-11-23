@@ -1,6 +1,5 @@
 import torch
 import gpytorch
-import typing
 
 
 class GP_DK(gpytorch.Module):

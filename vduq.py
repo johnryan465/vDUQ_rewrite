@@ -1,12 +1,11 @@
 # This file contains the vDUQ model and training loop
 # This relies on setting up a GP and a feature embedding and passing them to gp_dk
-
+# In addition to a custom training loop
 
 import torch
 from torch import nn
 import torch.nn.functional as F
 
-from layers.fc import FC
 from layers.inducing_gp import InducingGP
 from layers.gp_dk import GP_DK
 from layers.soft_spectral import soft_spectral_norm
@@ -20,10 +19,10 @@ class Embed(nn.Module):
         super(Embed, self).__init__()
         self.conv1 = soft_spectral_norm(nn.Conv2d(3, 6, 5))
         self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = soft_spectral_norm(nn.Conv2d(6, 16, 5), coeffs=0.9)
-        self.fc1 = soft_spectral_norm(nn.Linear(16 * 5 * 5, 120), coeffs=0.9)
-        self.fc2 = soft_spectral_norm(nn.Linear(120, 84), coeffs = 0.9)
-        self.fc3 = soft_spectral_norm(nn.Linear(84, 10), coeffs=0.9)
+        self.conv2 = soft_spectral_norm(nn.Conv2d(6, 16, 5), coeff=0.9)
+        self.fc1 = soft_spectral_norm(nn.Linear(16 * 5 * 5, 120), coeff=0.9)
+        self.fc2 = soft_spectral_norm(nn.Linear(120, 84), coeff = 0.9)
+        self.fc3 = soft_spectral_norm(nn.Linear(84, 10), coeff=0.9)
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
@@ -38,7 +37,7 @@ class Embed(nn.Module):
 class vDUQ(gpytorch.Module):
     def __init__(self, num_classes : int, num_data : int):
         super(vDUQ, self).__init__()
-        self.gp = InducingGP(torch.ones(3,num_classes))
+        self.gp = InducingGP(torch.ones(3,num_classes), num_classes=num_classes)
         self.embed = Embed()  # This is a regularised embedding layer with controlled lipshitz constant
         self.gp_dk = GP_DK(self.embed, self.gp)
         self.likelihood = SoftmaxLikelihood(
@@ -50,18 +49,28 @@ class vDUQ(gpytorch.Module):
         return self.gp_dk.forward(x)
 
     @staticmethod
-    def training_loop():
-        def func(data, optimizer, net):
-            inputs, labels = data
+    def training_step(data, optimizer, net):
+        net.train()
+        net.likelihood.train()
+        inputs, labels = data
+        # zero the parameter gradients
+        optimizer.zero_grad()
 
-            # zero the parameter gradients
-            optimizer.zero_grad()
+        # forward + backward + optimize
+        outputs = net(inputs)
+        elbo = -net.elbo_fn(outputs, labels)
+        elbo.backward()
+        optimizer.step()
+        return elbo.item()
 
-            # forward + backward + optimize
+    @staticmethod
+    def eval_step(data, net):
+        net.eval()
+        net.likelihood.eval()
+        inputs, labels = data
+
+        with torch.no_grad():
             outputs = net(inputs)
-            elbo = -net.elbo_fn(outputs, labels)
-            elbo.backward()
-            optimizer.step()
-            return elbo.item()
-        return func
+
+        return outputs, labels
 

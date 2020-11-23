@@ -3,6 +3,9 @@ import torch
 from torch.nn.functional import normalize
 from torch.nn.utils.spectral_norm import SpectralNorm, SpectralNormLoadStateDictPreHook, SpectralNormStateDictHook
 from torch import nn
+
+T_module = TypeVar('T_module', bound=nn.Module)
+
 class SoftSpectralNorm(SpectralNorm):
     # To use soft constraints instead of hard constraints we can't
     # directly use the inbuilt spectral norm from pytorch
@@ -13,7 +16,7 @@ class SoftSpectralNorm(SpectralNorm):
         self.coeff = coeff
 
     # overriding parent class function
-    def compute_weight(self, module: nn.Module, do_power_iteration: bool) -> torch.Tensor:
+    def compute_weight(self, module: T_module, do_power_iteration: bool) -> torch.Tensor:
         weight = getattr(module, self.name + '_orig')
         u = getattr(module, self.name + '_u')
         v = getattr(module, self.name + '_v')
@@ -38,7 +41,7 @@ class SoftSpectralNorm(SpectralNorm):
         return weight
 
     @staticmethod
-    def apply(module: nn.Module, name: str, n_power_iterations: int, dim: int, eps: float, coeffs : float) -> 'SoftSpectralNorm':
+    def apply(module: T_module, name: str, n_power_iterations: int, dim: int, eps: float, coeffs : float) -> 'SoftSpectralNorm':
         for k, hook in module._forward_pre_hooks.items():
             if isinstance(hook, SpectralNorm) and hook.name == name:
                 raise RuntimeError("Cannot register two spectral_norm hooks on "
@@ -73,7 +76,6 @@ class SoftSpectralNorm(SpectralNorm):
         return fn
 
 
-T_module = TypeVar('T_module', bound=nn.Module)
 
 
 def soft_spectral_norm(module: T_module,
@@ -81,7 +83,7 @@ def soft_spectral_norm(module: T_module,
                   n_power_iterations: int = 1,
                   eps: float = 1e-12,
                   dim: Optional[int] = None,
-                  coeffs : float = 0.9) -> T_module:
+                  coeff : float = 0.9) -> T_module:
     if dim is None:
         if isinstance(module, (torch.nn.ConvTranspose1d,
                                torch.nn.ConvTranspose2d,
@@ -89,5 +91,5 @@ def soft_spectral_norm(module: T_module,
             dim = 1
         else:
             dim = 0
-    SoftSpectralNorm.apply(module, name, n_power_iterations, dim, eps, coeffs)
+    SoftSpectralNorm.apply(module, name, n_power_iterations, dim, eps, coeff)
     return module

@@ -13,14 +13,15 @@ class Data:
 
         self.trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
                                                 download=True, transform=self.transform)
-        self.trainloader = torch.utils.data.DataLoader(self.trainset, batch_size=4,
+        self.trainloader = torch.utils.data.DataLoader(self.trainset, batch_size=128,
                                                 shuffle=True, num_workers=2)
         self.testset = torchvision.datasets.CIFAR10(root='./data', train=False,
                                             download=True, transform=self.transform)
-        self.testloader = torch.utils.data.DataLoader(self.testset, batch_size=4,
+        self.testloader = torch.utils.data.DataLoader(self.testset, batch_size=128,
                                                 shuffle=False, num_workers=2)
         self.classes = ('plane', 'car', 'bird', 'cat',
                 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+
     def get_classes(self) -> Tuple:
         return self.classes
 
